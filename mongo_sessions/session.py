@@ -1,10 +1,16 @@
+import json
+import pickle
 from datetime import timedelta
+
 try:
     from django.utils.encoding import force_unicode
 except ImportError:  # Python 3.*
     from django.utils.encoding import force_text as force_unicode
 from django.contrib.sessions.backends.base import SessionBase, CreateError
+from django.core import serializers
+from django.core.serializers.json import DjangoJSONEncoder
 from django.utils import timezone
+
 from mongo_sessions import settings
 
 
@@ -34,7 +40,7 @@ class SessionStore(SessionBase):
         })
 
         if not mongo_session is None:
-            return self.decode(force_unicode(mongo_session['session_data']))
+            return self.decode(mongo_session['session_data'])
         else:
             self.create()
             return {}
@@ -63,6 +69,38 @@ class SessionStore(SessionBase):
                 continue
             self.modified = True
             return
+
+    def encode(self, session_dict):
+        d = {}
+        for k in session_dict:
+            # hold openid's hand
+            try:
+                json.dumps(session_dict[k])
+            except Exception:
+                try:
+                    d[k + '_serialized'] = serializers.serialize('json', session_dict[k])
+                except TypeError:
+                    d[k + '_serialized'] = serializers.serialize('json', [session_dict[k]])
+                except (Exception, DjangoJSONEncoder):
+                    d[k + '_pickled'] = pickle.dumps(session_dict[k])
+            else:
+                d[k] = session_dict[k]
+        return d
+
+    def decode(self, session_data):
+        # This mirrors SessionBase.decode()'s convention of catching all errors
+        try:
+            d = {}
+            for k,v in session_data.iteritems():
+                if k.endswith('_pickled'):
+                    d[k.replace('_pickled', '')] = pickle.loads(v)
+                elif k.endswith('_serialized'):
+                    d[k.replace('_serialized', '')] = serializers.deserialize('json', v)
+                else:
+                    d[k] = v
+            return d
+        except:
+            return {}
 
     def save(self, must_create=False):
         session_key = self._get_or_create_session_key()

@@ -35,7 +35,7 @@ if not MONGO_CLIENT:
 
 MONGO_DB_VERSION = MONGO_CLIENT.connection.server_info()['versionArray']
 
-if not float('.'.join(MONGO_DB_VERSION[:2])) >= 2.2:
+if not float('.'.join(str(i) for i in MONGO_DB_VERSION[:2])) >= 2.2:
     raise ImproperlyConfigured(
         '''
         Your mongodb service doesn't support TTL
